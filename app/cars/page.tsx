@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 import { Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/Alert";
 
@@ -32,12 +33,26 @@ export default function CarsListPage() {
   const [loadingCars, setLoadingCars] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.push('/login');
+    } catch (error) {
+      console.error('Error logging out:', error);
+      setError('Failed to log out. Please try again.');
+    }
+  };
+
   const fetchUserCars = useCallback(async () => {
     if (!user) return;
 
     try {
       const carsRef = collection(db, 'cars');
-      const userCarsQuery = query(carsRef, where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
+      const userCarsQuery = query(
+        carsRef, 
+        where('userId', '==', user.uid), 
+        orderBy('createdAt', 'desc')
+      );
       const querySnapshot = await getDocs(userCarsQuery);
 
       const carsData = querySnapshot.docs.map(doc => ({
@@ -46,6 +61,7 @@ export default function CarsListPage() {
       })) as Car[];
 
       setCars(carsData);
+      setFilteredCars(carsData); // Initialize filtered cars with all cars
     } catch (error) {
       console.error('Error fetching cars:', error);
       setError('Failed to load cars. Please try again.');
@@ -66,7 +82,8 @@ export default function CarsListPage() {
     if (searchQuery === '') {
       setFilteredCars(cars);
     } else {
-      setFilteredCars(filterCars(cars, searchQuery));
+      const filtered = filterCars(cars, searchQuery);
+      setFilteredCars(filtered);
     }
   }, [searchQuery, cars]);
 
@@ -92,11 +109,16 @@ export default function CarsListPage() {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-semibold">My Cars</h1>
         <div className='flex space-x-2'>
-          <Link href="/login">
-            <Button className='border border-black bg-white text-black hover:bg-black hover:text-white'>Logout</Button>
-          </Link>
+          <Button 
+            onClick={handleLogout} 
+            className='border border-black bg-white text-black hover:bg-black hover:text-white'
+          >
+            Logout
+          </Button>
           <Link href="/cars/new">
-            <Button className='hover:border border-black hover:bg-white hover:text-black'>Add New Car</Button>
+            <Button className='hover:border border-black hover:bg-white hover:text-black'>
+              Add New Car
+            </Button>
           </Link>
         </div>
       </div>
@@ -131,16 +153,11 @@ export default function CarsListPage() {
             >
               <div className="relative w-92 h-92 overflow-hidden rounded-lg bg-gray-100">
                 {car.images?.length > 0 ? (
-                  <div className="flex overflow-hidden animate-marquee">
-                    {car.images.map((image, index) => (
-                      <img
-                        key={index}
-                        src={image}
-                        alt={car.title}
-                        className="w-92 h-92 object-cover flex-shrink-0"
-                      />
-                    ))}
-                  </div>
+                  <img
+                    src={car.images[0]}
+                    alt={car.title}
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <div className="w-full h-full bg-gray-300 flex items-center justify-center">
                     <span className="text-gray-500">No Image</span>
@@ -155,13 +172,25 @@ export default function CarsListPage() {
                 <p className="text-sm text-gray-600 mt-2 line-clamp-2">
                   {car.description}
                 </p>
+                {car.tags && car.tags.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {car.tags.map((tag, index) => (
+                      <span
+                        key={index}
+                        className="inline-block px-2 py-1 text-xs bg-gray-100 rounded-full"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </Link>
           ))}
         </div>
       ) : (
         <div className="text-center py-8">
-          <p className="text-gray-600 mb-4">No cars added yet</p>
+          <p className="text-gray-600 mb-4">No cars found</p>
           <Link href="/cars/new">
             <Button>Add Your First Car</Button>
           </Link>

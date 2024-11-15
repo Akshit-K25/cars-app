@@ -90,13 +90,19 @@ const CarForm: React.FC<CarFormProps> = ({ onSubmit }) => {
         createdAt: new Date().toISOString()
       };
 
+      // Always save to Firestore first
+      await addDoc(collection(db, 'cars'), carData);
+      
+      // If there's an onSubmit handler, call it after saving to Firestore
       if (onSubmit) {
         await onSubmit(carData);
-      } else {
-        await addDoc(collection(db, 'cars'), carData);
-        router.push('/cars');
       }
+
+      // Refresh the page cache and navigate
+      router.refresh();
+      router.push('/cars');
     } catch (error) {
+      console.error('Error saving car:', error);
       setError(error instanceof Error ? error.message : 'An error occurred while saving the car');
     } finally {
       setLoading(false);
@@ -181,8 +187,19 @@ const CarForm: React.FC<CarFormProps> = ({ onSubmit }) => {
             onChange={handleTagChange}
             placeholder="Enter tag"
             disabled={loading}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAddTag();
+              }
+            }}
           />
-          <Button type="button" onClick={handleAddTag} disabled={loading}>
+          <Button 
+            type="button" 
+            onClick={handleAddTag} 
+            disabled={loading}
+            variant="outline"
+          >
             Add
           </Button>
         </div>
