@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, orderBy, FirestoreError } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/Alert";
 
@@ -37,69 +37,30 @@ export default function CarsListPage() {
 
     try {
       const carsRef = collection(db, 'cars');
-      
-      try {
-        const userCarsQuery = query(
-          carsRef, 
-          where('userId', '==', user.uid),
-          orderBy('createdAt', 'desc')
-        );
-        
-        const querySnapshot = await getDocs(userCarsQuery);
-        const carsData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Car[];
+      const userCarsQuery = query(carsRef, where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(userCarsQuery);
 
-        setCars(carsData);
-      } catch (error) {
-        // Type guard for FirestoreError
-        if (error instanceof FirestoreError && error.code === 'failed-precondition') {
-          console.warn('Index not ready, falling back to unordered query');
-          const fallbackQuery = query(
-            carsRef, 
-            where('userId', '==', user.uid)
-          );
-          
-          const fallbackSnapshot = await getDocs(fallbackQuery);
-          const fallbackData = fallbackSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })) as Car[];
+      const carsData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Car[];
 
-          fallbackData.sort((a, b) => {
-            const dateA = new Date(a.createdAt).getTime();
-            const dateB = new Date(b.createdAt).getTime();
-            return dateB - dateA;
-          });
-
-          setCars(fallbackData);
-
-          if (process.env.NODE_ENV === 'development') {
-            setError('Admin Note: Please create the required index in Firebase Console. The data is currently being sorted in-memory as a fallback.');
-          }
-        } else {
-          throw error;
-        }
-      }
+      setCars(carsData);
     } catch (error) {
       console.error('Error fetching cars:', error);
       setError('Failed to load cars. Please try again.');
     } finally {
       setLoadingCars(false);
     }
-  }, [user]); // Include user in dependencies
+  }, [user]);
 
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace('/login');
-      return;
-    }
-
-    if (user) {
+    } else if (user) {
       fetchUserCars();
     }
-  }, [user, authLoading, router, fetchUserCars]); // Include fetchUserCars in dependencies
+  }, [authLoading, user, fetchUserCars, router]);
 
   useEffect(() => {
     if (searchQuery === '') {

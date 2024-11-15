@@ -1,9 +1,7 @@
-// firebase.ts
-
-"use client"; // Ensures this module is treated as a client component in Next.js
+"use client";
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, inMemoryPersistence, setPersistence, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -16,44 +14,34 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// Validate Firebase config
-const validateFirebaseConfig = () => {
-  const requiredFields = [
-    'apiKey',
-    'authDomain',
-    'projectId',
-    'storageBucket',
-    'messagingSenderId',
-    'appId'
-  ];
+// Initialize Firebase
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
 
-  const missingFields = requiredFields.filter(
-    field => !firebaseConfig[field as keyof typeof firebaseConfig]
-  );
+// Use in-memory persistence
+setPersistence(auth, inMemoryPersistence)
+  .catch((error) => {
+    console.error("Auth persistence error:", error);
+  });
 
-  if (missingFields.length > 0) {
-    throw new Error(
-      `Missing Firebase configuration fields: ${missingFields.join(', ')}. ` +
-      'Please check your .env.local file.'
-    );
+const provider = new GoogleAuthProvider();
+
+const signInWithGoogle = async () => {
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+    
+    // Save user data to Firestore or session
+    const token = await user.getIdToken();
+    localStorage.setItem('authToken', token);
+    
+    return user;
+  } catch (error) {
+    console.error("Google Sign-in Error:", error);
+    throw error;
   }
 };
 
-let firebaseApp;
-
-try {
-  validateFirebaseConfig();
-  firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-} catch (error) {
-  console.error('Firebase initialization error:', error);
-  throw error;
-}
-
-// Log config in development to ensure values are correct
-if (process.env.NODE_ENV === 'development') {
-  console.log('Firebase config:', firebaseConfig);
-}
-
-export const auth = getAuth(firebaseApp);
-export const db = getFirestore(firebaseApp);
-export const storage = getStorage(firebaseApp);
+export { auth, db, storage, signInWithGoogle };

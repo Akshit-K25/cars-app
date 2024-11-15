@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { createUserWithEmailAndPassword, updateProfile, AuthError } from 'firebase/auth';
-import { auth, db } from '@/lib/firebase';
+import { auth, db, signInWithGoogle } from '@/lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -48,19 +48,6 @@ const SignupForm = () => {
     return null;
   };
 
-  const handleAuthError = (error: AuthError): string => {
-    switch (error.code) {
-      case 'auth/email-already-in-use':
-        return 'This email is already registered. Please try logging in instead.';
-      case 'auth/invalid-email':
-        return 'Invalid email address.';
-      case 'auth/weak-password':
-        return 'Password should be at least 6 characters.';
-      default:
-        return `Failed to create account: ${error.message}`;
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
@@ -80,6 +67,7 @@ const SignupForm = () => {
         formData.email, 
         formData.password
       );
+      
       const user = userCredential.user;
 
       // Update profile with name
@@ -91,16 +79,58 @@ const SignupForm = () => {
       await setDoc(doc(db, 'users', user.uid), {
         name: formData.name,
         email: formData.email,
-        createdAt: new Date(),
+        createdAt: new Date().toISOString(),
       });
+
+      // Get user token
+      const token = await user.getIdToken();
+      localStorage.setItem('authToken', token);
 
       router.push('/cars');
     } catch (err) {
-      if (err instanceof Error) {
-        setError(handleAuthError(err as AuthError));
-      } else {
-        setError('An unexpected error occurred. Please try again.');
+      const error = err as AuthError;
+      console.error('Signup error:', error);
+
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          setError('This email is already registered. Please try logging in instead.');
+          break;
+        case 'auth/invalid-email':
+          setError('Invalid email address.');
+          break;
+        case 'auth/weak-password':
+          setError('Password should be at least 6 characters.');
+          break;
+        default:
+          setError('Failed to create account. Please try again.');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignUp = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const user = await signInWithGoogle();
+      
+      // Create user document in Firestore
+      if (user) {
+        const userDocRef = doc(db, 'users', user.uid);
+        await setDoc(userDocRef, {
+          name: user.displayName,
+          email: user.email,
+          createdAt: new Date().toISOString(),
+        });
+
+        // Navigate to another page after successful login
+        router.push('/cars');
+      }
+    } catch (error) {
+      setError('Failed to sign up with Google. Please try again.');
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -126,6 +156,7 @@ const SignupForm = () => {
             onChange={handleChange}
             placeholder="Enter your name"
             disabled={loading}
+            required
           />
         </div>
 
@@ -141,6 +172,7 @@ const SignupForm = () => {
             onChange={handleChange}
             placeholder="Enter your email"
             disabled={loading}
+            required
           />
         </div>
 
@@ -156,6 +188,7 @@ const SignupForm = () => {
             onChange={handleChange}
             placeholder="Create a password"
             disabled={loading}
+            required
           />
         </div>
 
@@ -171,6 +204,7 @@ const SignupForm = () => {
             onChange={handleChange}
             placeholder="Confirm your password"
             disabled={loading}
+            required
           />
         </div>
 
@@ -186,6 +220,15 @@ const SignupForm = () => {
           disabled={loading}
         >
           {loading ? 'Creating Account...' : 'Sign Up'}
+        </Button>
+
+        <Button
+          type="button"
+          className="w-full bg-blue-500 text-white hover:bg-blue-600"
+          onClick={handleGoogleSignUp}
+          disabled={loading}
+        >
+          {loading ? 'Signing Up with Google...' : 'Sign Up with Google'}
         </Button>
 
         <p className="text-sm text-center text-gray-500">
